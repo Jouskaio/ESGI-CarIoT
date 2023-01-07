@@ -18,8 +18,9 @@ void loop() {
     unsigned char data = mySerial.read();
     Serial.println(data);
   }
-  mySerial.print("1");
+  // Communicate (transmission) with the STM32
+  /*mySerial.print("1");
   delay(500);
   mySerial.print("0");
-  delay(500);
+  delay(500);*/
 }

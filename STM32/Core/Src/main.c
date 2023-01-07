@@ -31,6 +31,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define TRIG_PIN GPIO_PIN_11
+#define TRIG_PORT GPIOA
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -39,12 +41,23 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim2;
+
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+// SERIAL
 char buf[1] = {40};
 char rx_data[10];
+
+// ULTRASONS
+uint64_t IC_Val1 = 0;
+uint64_t IC_Val2 = 0;
+double Difference = 0;
+uint8_t Is_First_Captured = 0;
+double Distance = 0;
+uint8_t DistanceCm = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -52,13 +65,23 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+// ULTRASON
+void HCSR04_Read (void)
+{
+    HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_SET);
+    HAL_Delay(10);
+    HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_RESET);
+    HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
+}
 
+// MOTOR
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (rx_data[0] == '1') {
@@ -69,6 +92,33 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
     }
     HAL_UART_Receive_IT(&huart1, rx_data, 1);
 }
+
+// ULTRASONS
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+    if(Is_First_Captured==0) {
+        IC_Val1 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
+        Is_First_Captured = 1;
+    }
+    else if (Is_First_Captured==1) {
+        IC_Val2 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
+        if(IC_Val2 > IC_Val1) {
+            Difference = IC_Val2 - IC_Val1;
+        }
+        else if (IC_Val1 > IC_Val2) {
+            Difference = (0xffffffff - IC_Val1) + IC_Val2;
+        }
+        Difference = Difference / 1000000;
+        Distance = Difference * 340/2;
+        Distance = Distance * 100;
+        DistanceCm = (uint8_t) Distance;
+
+        buf[0] = DistanceCm;
+        HAL_UART_Transmit(&huart1, (uint8_t *)buf, 1, 1000);
+        Is_First_Captured = 0;
+    }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -101,6 +151,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_USART1_UART_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_IT(&huart1, rx_data, 2);
   /* USER CODE END 2 */
@@ -110,9 +161,15 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+
     /* USER CODE BEGIN 3 */
+	  // MOTOR PART
 	  HAL_UART_Transmit(&huart1, (uint8_t *)buf, 1, 1000);
 	  HAL_Delay(1000);
+
+	  // ULTRASON
+	  HCSR04_Read();
+	  HAL_Delay(200);
 
   }
   /* USER CODE END 3 */
@@ -162,6 +219,64 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_IC_InitTypeDef sConfigIC = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 84-1;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 4294967295;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_IC_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_BOTHEDGE;
+  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 0;
+  if (HAL_TIM_IC_ConfigChannel(&htim2, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
 }
 
 /**
@@ -260,6 +375,16 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
 }
 
