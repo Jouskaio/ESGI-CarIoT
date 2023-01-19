@@ -33,6 +33,7 @@
 /* USER CODE BEGIN PD */
 #define TRIG_PIN GPIO_PIN_11
 #define TRIG_PORT GPIOA
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -50,7 +51,7 @@ UART_HandleTypeDef huart2;
 // SERIAL
 char buf[1] = {40};
 char rx_data[10];
-
+char rx_buttonsLED[1];
 // ULTRASONS
 uint64_t IC_Val1 = 0;
 uint64_t IC_Val2 = 0;
@@ -67,7 +68,6 @@ static void MX_USART2_UART_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
-
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -99,22 +99,28 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
     if(Is_First_Captured==0) {
         IC_Val1 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
         Is_First_Captured = 1;
-    }
-    else if (Is_First_Captured==1) {
+    } else  {
         IC_Val2 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
-        if(IC_Val2 > IC_Val1) {
+
+        if (IC_Val2 > IC_Val1) {
             Difference = IC_Val2 - IC_Val1;
+        } else {
+            Difference = IC_Val1 - IC_Val2;
         }
-        else if (IC_Val1 > IC_Val2) {
-            Difference = (0xffffffff - IC_Val1) + IC_Val2;
-        }
+
+        // Format the distance
+        //
         Difference = Difference / 1000000;
-        Distance = Difference * 340/2;
+        Distance = Difference * 340 / 2;
         Distance = Distance * 100;
         DistanceCm = (uint8_t) Distance;
+        Is_First_Captured = 0;
+        //TIM3->CNT = 0;
 
+        // Send message to Arduino
         buf[0] = DistanceCm;
         HAL_UART_Transmit(&huart1, (uint8_t *)buf, 1, 1000);
+        // Reinitialize the value to 0 to listen the next interruption
         Is_First_Captured = 0;
     }
 }
@@ -153,7 +159,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  HAL_UART_Receive_IT(&huart1, rx_data, 2);
+  HAL_UART_Receive_IT(&huart1, rx_data, 4);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -166,6 +172,14 @@ int main(void)
 	  // MOTOR PART
 	  HAL_UART_Transmit(&huart1, (uint8_t *)buf, 1, 1000);
 	  HAL_Delay(1000);
+
+	  // LED
+	  if (rx_data[3] == 'L') {
+		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_10);
+		  HAL_Delay(1000);
+		  // Turn off the other LED
+		  //HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_10);
+	  }
 
 	  // ULTRASON
 	  HCSR04_Read();
@@ -363,6 +377,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
+
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
@@ -375,6 +392,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB10 */
+  GPIO_InitStruct.Pin = GPIO_PIN_10;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PA8 */
   GPIO_InitStruct.Pin = GPIO_PIN_8;
