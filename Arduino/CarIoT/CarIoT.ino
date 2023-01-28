@@ -4,6 +4,7 @@ int txPin = 10;
 int rxPin = 11;
 int buttonLEDLeft = 4;
 int buttonLEDRight = 7;
+
 SoftwareSerial STM32 = SoftwareSerial(rxPin, txPin);
 
 void setup() {
@@ -52,6 +53,7 @@ bool detectInterruption(int numberPort) {
 void sendDataInterruption(bool event, int portLED) {
   //STM32.print("L");
   if(event == 1) {
+    delay(500);
     if (portLED == 4) {
       Serial.println("L");
       STM32.print("L");
@@ -59,5 +61,5 @@ void sendDataInterruption(bool event, int portLED) {
       Serial.println("R");
       STM32.print("R");
     }
-  } Serial.println(".");
+  }
 }

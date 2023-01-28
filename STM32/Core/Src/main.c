@@ -84,12 +84,12 @@ void HCSR04_Read (void)
 // MOTOR
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-    if (rx_data[0] == '1') {
+    /*if (rx_data[0] == '1') {
         HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, 1);
     }
     else {
         HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, 0);
-    }
+    }*/
     HAL_UART_Receive_IT(&huart1, rx_data, 1);
 }
 
@@ -159,7 +159,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  HAL_UART_Receive_IT(&huart1, rx_data, 4);
+  HAL_UART_Receive_IT(&huart1, rx_data, 2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -173,12 +173,32 @@ int main(void)
 	  HAL_UART_Transmit(&huart1, (uint8_t *)buf, 1, 1000);
 	  HAL_Delay(1000);
 
-	  // LED
-	  if (rx_data[3] == 'L') {
-		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_10);
+	  // LED monitoring
+	  if (rx_data[0] == 'L') {
+		  //HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_10);
+		  // Turn on LED left
+		  if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_10) == 0) {
+			  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_SET);
+			  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
+		  } else {
+			  // Turn off LED left
+			  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
+			  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
+		  }
 		  HAL_Delay(1000);
 		  // Turn off the other LED
 		  //HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_10);
+	  } else if (rx_data[0] == 'R') {
+		  // Turn on LED right
+		  if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_7) == 0) {
+			  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
+			  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
+		  } else {
+			  // Turn off LED right
+			  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
+			  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
+		  }
+		  HAL_Delay(1000);
 	  }
 
 	  // ULTRASON
@@ -380,6 +400,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
+
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
@@ -399,6 +422,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PC7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PA8 */
   GPIO_InitStruct.Pin = GPIO_PIN_8;
