@@ -31,7 +31,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define TRIG_PIN GPIO_PIN_11
+#define TRIG_PIN GPIO_PIN_7
 #define TRIG_PORT GPIOA
 
 /* USER CODE END PD */
@@ -49,7 +49,7 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 // SERIAL
-char buf[1] = {40};
+char buf[0] = {0};
 char rx_data[10];
 char rx_buttonsLED[1];
 // ULTRASONS
@@ -90,39 +90,41 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
     else {
         HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, 0);
     }*/
-    HAL_UART_Receive_IT(&huart1, rx_data, 1);
+
+	HAL_UART_Receive_IT(&huart1, rx_data, 2);
 }
 
 // ULTRASONS
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
-    if(Is_First_Captured==0) {
-        IC_Val1 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
-        Is_First_Captured = 1;
-    } else  {
-        IC_Val2 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
+	 if (Is_First_Captured==0) // if the first value is not captured
+	    {
+	        IC_Val1 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2); // read the first value
+	        Is_First_Captured = 1;  // set the first captured as true
+	    }
+	    else if (Is_First_Captured==1)   // if the first is already captured
+	    {
+	        IC_Val2 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);  // read second value
+	        if (IC_Val2 > IC_Val1)
+	        {
+	            Difference = IC_Val2-IC_Val1;
+	        }
+	        else if (IC_Val1 > IC_Val2)
+	        {
+	            Difference = (0xffffffff - IC_Val1) + IC_Val2;
+	        }
+	        Difference = Difference / 1000000;
+	        Distance = Difference * 340/2;
+	        Distance = Distance * 100;
+	        DistanceCm = (uint8_t) Distance;
+	        Is_First_Captured = 0; // set it back to false
 
-        if (IC_Val2 > IC_Val1) {
-            Difference = IC_Val2 - IC_Val1;
-        } else {
-            Difference = IC_Val1 - IC_Val2;
-        }
-
-        // Format the distance
-        //
-        Difference = Difference / 1000000;
-        Distance = Difference * 340 / 2;
-        Distance = Distance * 100;
-        DistanceCm = (uint8_t) Distance;
-        Is_First_Captured = 0;
-        //TIM3->CNT = 0;
-
-        // Send message to Arduino
-        buf[0] = DistanceCm;
-        HAL_UART_Transmit(&huart1, (uint8_t *)buf, 1, 1000);
-        // Reinitialize the value to 0 to listen the next interruption
-        Is_First_Captured = 0;
-    }
+	        buf[0] = DistanceCm;
+	        HAL_UART_Transmit(&huart1,(uint8_t *)buf, 1, 1000);
+	        // set polarity to rising edge
+	        HAL_TIM_IC_Stop_IT(&htim2, TIM_CHANNEL_1);
+	        __HAL_TIM_SET_COUNTER(&htim2, 0);  // reset the counter
+	    }
 }
 
 /* USER CODE END 0 */
@@ -174,10 +176,10 @@ int main(void)
 	  HAL_Delay(1000);
 
 	  // LED monitoring
-	  if (rx_data[0] == 'L') {
+	  if (rx_data[0] == 0) {
 		  //HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_10);
 		  // Turn on LED left
-		  if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_10) == 0) {
+		  /*if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_10) == 0) {
 			  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_SET);
 			  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
 		  } else {
@@ -186,6 +188,10 @@ int main(void)
 			  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
 		  }
 		  HAL_Delay(1000);
+		  */
+		  // WARNING
+		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_10);
+		  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7);
 		  // Turn off the other LED
 		  //HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_10);
 	  } else if (rx_data[0] == 'R') {
@@ -395,7 +401,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, LD2_Pin|GPIO_PIN_7|GPIO_PIN_11, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
@@ -409,12 +415,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
+  /*Configure GPIO pins : LD2_Pin PA7 PA11 */
+  GPIO_InitStruct.Pin = LD2_Pin|GPIO_PIN_7|GPIO_PIN_11;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB10 */
   GPIO_InitStruct.Pin = GPIO_PIN_10;
